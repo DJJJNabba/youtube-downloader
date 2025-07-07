@@ -1,5 +1,33 @@
-import { NextResponse } from 'next/server';
-import { createSession } from '@/lib/session';
+import { NextRequest, NextResponse } from 'next/server';
+import { createSession, getSession } from '@/lib/session';
+
+export async function GET(req: NextRequest) {
+  try {
+    const sessionId = req.cookies.get('sessionId')?.value;
+    
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: 'No session found' },
+        { status: 401 }
+      );
+    }
+
+    const session = getSession(sessionId);
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Invalid or expired session' },
+        { status: 401 }
+      );
+    }
+
+    return NextResponse.json({ sessionId });
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to validate session' },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST() {
   try {

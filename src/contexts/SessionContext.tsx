@@ -41,6 +41,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    // Always create a new session for reliability in development
     createSession();
   }, []);
 
