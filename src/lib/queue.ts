@@ -1,4 +1,3 @@
-import Queue from 'bull';
 import { spawn } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
@@ -18,14 +17,8 @@ export interface DownloadJob {
   expiresAt: Date;
 }
 
-const downloadQueue = new Queue('download queue', {
-  redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379'),
-  },
-});
-
 const jobs = new Map<string, DownloadJob>();
+const pendingJobs: string[] = [];
 
 export const addDownloadJob = (sessionId: string, url: string, format: 'mp3' | 'mp4', type: 'video' | 'playlist'): string => {
   const jobId = uuidv4();
@@ -45,8 +38,10 @@ export const addDownloadJob = (sessionId: string, url: string, format: 'mp3' | '
   };
 
   jobs.set(jobId, job);
+  pendingJobs.push(jobId);
   
-  downloadQueue.add('download', { jobId, sessionId, url, format, type });
+  // Process job immediately (simplified queue)
+  processNextJob();
   
   return jobId;
 };
@@ -77,13 +72,14 @@ export const updateJobStatus = (jobId: string, status: DownloadJob['status'], er
   }
 };
 
-downloadQueue.process('download', async (job) => {
-  const { jobId, url, format, type } = job.data;
-  const downloadJob = jobs.get(jobId);
+const processNextJob = async () => {
+  if (pendingJobs.length === 0) return;
   
-  if (!downloadJob) {
-    throw new Error('Job not found');
-  }
+  const jobId = pendingJobs.shift();
+  if (!jobId) return;
+  
+  const downloadJob = jobs.get(jobId);
+  if (!downloadJob) return;
 
   updateJobStatus(jobId, 'processing');
 
@@ -92,60 +88,75 @@ downloadQueue.process('download', async (job) => {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
+  const ytdlpPath = process.env.YTDLP_PATH || '~/.local/bin/yt-dlp';
+  const ffmpegPath = process.env.FFMPEG_PATH || '~/.local/bin';
   const outputPath = path.join(outputDir, `${jobId}.%(ext)s`);
   
   const args = [
     '--no-playlist',
     '--output', outputPath,
+    '--ffmpeg-location', ffmpegPath.replace('~', process.env.HOME || ''),
   ];
 
-  if (format === 'mp3') {
+  if (downloadJob.format === 'mp3') {
     args.push('--extract-audio', '--audio-format', 'mp3');
   } else {
     args.push('--format', 'best[ext=mp4]');
   }
 
-  if (type === 'playlist') {
+  if (downloadJob.type === 'playlist') {
     args.splice(0, 1); // Remove --no-playlist
   }
 
-  args.push(url);
+  args.push(downloadJob.url);
 
-  return new Promise((resolve, reject) => {
-    const ytdlp = spawn('yt-dlp', args);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const ytdlp = spawn(ytdlpPath.replace('~', process.env.HOME || ''), args);
 
-    ytdlp.stdout.on('data', (data) => {
-      const output = data.toString();
-      const progressMatch = output.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
-      if (progressMatch) {
-        const progress = parseFloat(progressMatch[1]);
-        updateJobProgress(jobId, progress);
-      }
-    });
-
-    ytdlp.stderr.on('data', (data) => {
-      console.error(`yt-dlp stderr: ${data}`);
-    });
-
-    ytdlp.on('close', (code) => {
-      if (code === 0) {
-        // Find the actual downloaded file
-        const files = fs.readdirSync(outputDir).filter(f => f.startsWith(jobId));
-        if (files.length > 0) {
-          const actualFilePath = path.join(outputDir, files[0]);
-          updateJobStatus(jobId, 'completed', undefined, actualFilePath);
-          resolve(actualFilePath);
-        } else {
-          updateJobStatus(jobId, 'failed', 'Downloaded file not found');
-          reject(new Error('Downloaded file not found'));
+      ytdlp.stdout.on('data', (data) => {
+        const output = data.toString();
+        const progressMatch = output.match(/\[download\]\s+(\d+(?:\.\d+)?)%/);
+        if (progressMatch) {
+          const progress = parseFloat(progressMatch[1]);
+          updateJobProgress(jobId, progress);
         }
-      } else {
-        updateJobStatus(jobId, 'failed', `yt-dlp exited with code ${code}`);
-        reject(new Error(`yt-dlp exited with code ${code}`));
-      }
+      });
+
+      ytdlp.stderr.on('data', (data) => {
+        console.error(`yt-dlp stderr: ${data}`);
+      });
+
+      ytdlp.on('close', (code) => {
+        if (code === 0) {
+          // Find the actual downloaded file
+          const files = fs.readdirSync(outputDir).filter(f => f.startsWith(jobId));
+          if (files.length > 0) {
+            const actualFilePath = path.join(outputDir, files[0]);
+            updateJobStatus(jobId, 'completed', undefined, actualFilePath);
+            resolve();
+          } else {
+            updateJobStatus(jobId, 'failed', 'Downloaded file not found');
+            reject(new Error('Downloaded file not found'));
+          }
+        } else {
+          updateJobStatus(jobId, 'failed', `yt-dlp exited with code ${code}`);
+          reject(new Error(`yt-dlp exited with code ${code}`));
+        }
+      });
+
+      ytdlp.on('error', (error) => {
+        updateJobStatus(jobId, 'failed', `Failed to start yt-dlp: ${error.message}`);
+        reject(error);
+      });
     });
-  });
-});
+  } catch (error) {
+    console.error(`Job ${jobId} failed:`, error);
+  }
+
+  // Process next job
+  setTimeout(processNextJob, 1000);
+};
 
 export const cleanupExpiredJobs = () => {
   const now = new Date();
