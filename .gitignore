@@ -33,6 +33,13 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# Downloads folder
+downloads/
+
+# Redis compiled files
+redis-stable/
+redis-stable.tar.gz
+
 # vercel
 .vercel
 
