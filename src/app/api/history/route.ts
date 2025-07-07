@@ -4,7 +4,7 @@ import { getSession } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
   try {
-    const sessionId = req.cookies.get('sessionId')?.value;
+    const sessionId = req.cookies.get('sessionId')?.value || req.cookies.get('sessionId_client')?.value;
     if (!sessionId) {
       return NextResponse.json(
         { error: 'No session found' },

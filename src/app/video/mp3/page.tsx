@@ -32,6 +32,7 @@ export default function VideoToMP3() {
       const data = await response.json();
       setCurrentJobId(data.jobId);
     } catch (err) {
+      console.error('Download error:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);

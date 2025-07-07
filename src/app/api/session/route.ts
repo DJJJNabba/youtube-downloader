@@ -3,7 +3,7 @@ import { createSession, getSession } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
   try {
-    const sessionId = req.cookies.get('sessionId')?.value;
+    const sessionId = req.cookies.get('sessionId')?.value || req.cookies.get('sessionId_client')?.value;
     
     if (!sessionId) {
       return NextResponse.json(
@@ -34,8 +34,18 @@ export async function POST() {
     const sessionId = createSession();
     
     const response = NextResponse.json({ sessionId });
+    // Set both HttpOnly cookie AND a regular cookie for client access
     response.cookies.set('sessionId', sessionId, {
       httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 2 * 60 * 60, // 2 hours
+      path: '/',
+    });
+    
+    // Also set a non-HttpOnly cookie for client-side access
+    response.cookies.set('sessionId_client', sessionId, {
+      httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 2 * 60 * 60, // 2 hours

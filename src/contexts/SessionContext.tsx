@@ -24,6 +24,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch('/api/session', {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
