@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description: "Download YouTube videos and playlists as MP3 or MP4 files",
 };
 
+import { SessionProvider } from '@/contexts/SessionContext';
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,7 +29,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <SessionProvider>
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );

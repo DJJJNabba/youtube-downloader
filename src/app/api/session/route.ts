@@ -9,8 +9,9 @@ export async function POST() {
     response.cookies.set('sessionId', sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 2 * 60 * 60, // 2 hours
+      path: '/',
     });
     
     return response;

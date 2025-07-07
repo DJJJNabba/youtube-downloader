@@ -23,7 +23,9 @@ export default function ProgressTracker({ jobId, onComplete }: ProgressTrackerPr
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const response = await fetch(`/api/status/${jobId}`);
+        const response = await fetch(`/api/status/${jobId}`, {
+          credentials: 'include',
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch status');
         }
@@ -88,39 +90,53 @@ export default function ProgressTracker({ jobId, onComplete }: ProgressTrackerPr
   };
 
   return (
-    <div className={`border rounded-md p-4 ${getStatusColor(job.status)}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium capitalize">{job.status}</span>
-        <span className="text-xs">
-          {job.status === 'processing' ? `${job.progress}%` : ''}
+    <div className={`rounded-lg p-6 ${getStatusColor(job.status)}`}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-2">
+          <div className={`w-3 h-3 rounded-full ${job.status === 'processing' ? 'animate-pulse' : ''} ${getProgressBarColor(job.status)}`}></div>
+          <span className="font-medium capitalize">{job.status}</span>
+        </div>
+        <span className="text-sm font-mono">
+          {job.status === 'processing' ? `${job.progress}%` : job.status === 'completed' ? '100%' : ''}
         </span>
       </div>
       
-      <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+      <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
         <div
-          className={`h-2 rounded-full transition-all duration-300 ${getProgressBarColor(job.status)}`}
+          className={`h-3 rounded-full transition-all duration-500 ease-out ${getProgressBarColor(job.status)}`}
           style={{ width: `${job.status === 'completed' ? 100 : job.progress}%` }}
         ></div>
       </div>
       
       {job.error && (
-        <p className="text-sm text-red-600 mt-2">{job.error}</p>
-      )}
-      
-      {job.status === 'completed' && (
-        <div className="mt-2">
-          <a
-            href={`/api/download/${jobId}`}
-            className="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
-          >
-            Download File
-          </a>
+        <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+          <p className="text-sm text-red-700">{job.error}</p>
         </div>
       )}
       
-      <div className="mt-2 text-xs text-gray-500">
-        Expires: {new Date(job.expiresAt).toLocaleString()}
-      </div>
+      {job.status === 'completed' && (
+        <div className="flex items-center justify-between">
+          <a
+            href={`/api/download/${jobId}`}
+            className="inline-flex items-center px-4 py-2 rounded-lg font-medium bg-green-600 text-white hover:bg-green-700 transition-colors shadow-sm"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Download File
+          </a>
+          <span className="text-xs text-gray-500">
+            Ready for download
+          </span>
+        </div>
+      )}
+      
+      {job.status !== 'completed' && (
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <span>Started: {new Date(job.createdAt).toLocaleTimeString()}</span>
+          <span>Expires: {new Date(job.expiresAt).toLocaleTimeString()}</span>
+        </div>
+      )}
     </div>
   );
 }
